@@ -29,7 +29,7 @@ Unless otherwise specified, refer to the license or usage terms provided with ea
 
 # Hub addendum
 
-terraform -> loadstring(game:HttpGet("https://raw.githubusercontent.com/Gnelfling/Carinae_hub/refs/heads/main/terraform.lua"))()
+terraform -> loadstring(game:HttpGet("[https://raw.githubusercontent.com/Gnelfling/Carinae_hub/refs/heads/main/terraform.lua](https://raw.githubusercontent.com/Gnelfling/Carinae_hub/refs/heads/main/terraform.lua)"))()
 
 # Gallery
 
