@@ -6167,10 +6167,10 @@ do
 		makeModularSwitch(tSwGrid, "Adaptive Terrain Metrics Sync", "Adapts tree count, scale, max slope, snowline & foliage tint to current biome.", "ADAPTIVE", labs.treesAdaptive, "rose", 2, function(on) labs.treesAdaptive = on end)
 
 		local tSlGrid = makeGrid(treeSec, 4, 54, 3, 8)
-		makeCustomSlider(tSlGrid, {label = "Spread intensity", min = 0.10, max = 2.50, step = 0.05, default = 1.00, get = function() return labs.spreadIntensity end, set = function(v) labs.spreadIntensity = v end}, 1, "rose")
-		makeCustomSlider(tSlGrid, {label = "Base tree scale", min = 0.35, max = 2.20, step = 0.05, default = 0.85, get = function() return labs.baseScale end, set = function(v) labs.baseScale = v end}, 2, "rose")
+		makeCustomSlider(tSlGrid, {label = "Spread intensity", min = 0.10, max = 50.00, step = 0.05, default = 1.00, get = function() return labs.spreadIntensity end, set = function(v) labs.spreadIntensity = v end}, 1, "rose")
+		makeCustomSlider(tSlGrid, {label = "Base tree scale", min = 0.35, max = 5.20, step = 0.05, default = 0.85, get = function() return labs.baseScale end, set = function(v) labs.baseScale = v end}, 2, "rose")
 		makeCustomSlider(tSlGrid, {label = "Random size var.", min = 0.00, max = 0.75, step = 0.05, default = 0.30, get = function() return labs.sizeVariance end, set = function(v) labs.sizeVariance = v end}, 3, "rose")
-		makeCustomSlider(tSlGrid, {label = "Max slope limit", min = 0.25, max = 1.20, step = 0.05, default = 0.68, get = function() return labs.maxSlope end, set = function(v) labs.maxSlope = v end}, 4, "rose")
+		makeCustomSlider(tSlGrid, {label = "Max slope limit", min = 0.25, max = 4.20, step = 0.05, default = 0.68, get = function() return labs.maxSlope end, set = function(v) labs.maxSlope = v end}, 4, "rose")
 
 		local tActRow = makeGrid(treeSec, 2, 34, 4, 8)
 		onClick(makeButton(tActRow, "🌲  SCATTER SYLVAN TREES NOW", {LayoutOrder = 1}, {selected = true, tone = "rose", special = true}), function()
