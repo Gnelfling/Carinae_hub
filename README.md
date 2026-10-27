@@ -16,7 +16,7 @@ Updated 2.3.9
 
 ## License
 
-Unless otherwise specified, refer to the license or usage terms provided with each individual project.
+None yet (bruh)
 
 # Hub addendum
 
