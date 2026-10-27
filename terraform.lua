@@ -80,9 +80,12 @@
 	        * Instantaneous 12.0 ClockTime & Deep Space Starfield skybox swap in space
 	        * True Zero-G Microgravity Float & RCS Flight (BodyVelocity vertical lock preventing any falling)
 	        * 14,000-Stud Orbital Ceiling Limit: Exceeding 14k studs forces atmospheric re-entry & plasma burn
+	        * Flipbook Explosion Re-Entry VFX: 8x8 flipbook plasma emitter (15194500627), 8-brightness orange torso light,
+	          smooth atmospheric spool-up audio (9104875504) with volume fade-in, low-to-normal pitch sweep & continuous screen shake
 	        * Full Game Audio Hard Vacuum Muting: Automatically silences all game audio in deep space
-	        * Multi-Layer Orbital Earth Backdrop (22,000-stud curved planetary horizon model placed
+	        * Multi-Layer Orbital Earth Backdrop (22,000-stud curved planetary horizon model placed at 2,000 st altitude,
 	          5,000 studs forward, with continents, cloud cover, pastel neon atmosphere limb & slow rotation)
+	        * Refined Orbital Probe Signals: Rotating dishes, pulsing point lights, 3D telemetry radio audio & nadir scan beams
 	    - Sylvan Canopy #1 Modular Trees with Adaptive Terrain Metrics Sync
 	    - 14-Layer Volumetric Clouds with 20,048-stud stretch beams and altitude anchoring
 	• Luau Register-Safe: 81 main-block locals (far below Luau's 200 local register limit)
@@ -378,8 +381,8 @@ do
 	-- 4. FIELD DEFINITIONS (30 UNIFIED PARAMETERS)
 	----------------------------------------------------------------------------------------------------
 	local FIELDS = {
-		Width = {label = "Width (studs)", min = 128, max = 7168, step = 4, default = 256, hint = "East–west size up to 7,168 studs. Streamed in center-outward tiles."},
-		Depth = {label = "Depth (studs)", min = 128, max = 7168, step = 4, default = 256, hint = "North–south size up to 7,168 studs. Right-click any slider to reset."},
+		Width = {label = "Width (studs)", min = 128, max = 21504, step = 4, default = 256, hint = "East–west size up to 21,504 studs (warning >8K). Streamed in center-outward tiles."},
+		Depth = {label = "Depth (studs)", min = 128, max = 21504, step = 4, default = 256, hint = "North–south size up to 21,504 studs (warning >8K). Right-click any slider to reset."},
 		MaxHeight = {label = "Peak height", min = 32, max = 384, step = 1, default = 144, hint = "Maximum surface elevation above base level."},
 		Roughness = {label = "Roughness", min = 0.2, max = 2.5, step = 0.01, default = 1, hint = "Feature frequency across the world."},
 		Detail = {label = "Detail", min = 0, max = 1.6, step = 0.01, default = 1, hint = "Fine fractal octaves and micro-relief."},
@@ -424,7 +427,7 @@ do
 	}
 	local PATH_GEN_KEYS = {"RiverCount", "RiverWidth", "TrailCount", "TrailWidth"}
 	local WATER_KEYS = {"WaterTransparency", "WaterWaveSize", "WaterWaveSpeed", "WaterReflectance"}
-	local QUICK_SIZES = {256, 512, 1024, 2048, 4096, 7168}
+	local QUICK_SIZES = {256, 512, 1024, 2048, 4096, 21504}
 
 	local function decimalsFor(step)
 		local d = 0
@@ -1371,6 +1374,11 @@ do
 		spaceStarCount = 4500,
 		spaceProbes = {},
 		spaceEvaActive = false,
+		reentryActive = false,
+		reentrySound = nil,
+		reentrySoundTime = 0,
+		reentryEmitter = nil,
+		reentryLight = nil,
 	}
 
 	local values = {}
@@ -1385,6 +1393,7 @@ do
 	end
 
 	local fn = {} -- Consolidated cross-module function dispatch table (saves 35+ top-level Luau registers!)
+	local ui = {} -- Forward-declared UI table (ensures early functions never encounter nil)
 
 	local function activeTileCols()
 		if perf.lowLagChunks then return 48 end
@@ -2316,6 +2325,7 @@ do
 			setStatus("ATMOSPHERIC SIMULATION ACTIVE", "Simulating altitude lapse rates, Rayleigh scattering decay, zero-G & space re-entry.", C.skyPale)
 		else
 			fn.removeOrbitEarth()
+			if fn.stopReentryVFX then fn.stopReentryVFX() end
 			if fn.muteAllGameAudio then fn.muteAllGameAudio(false) end
 			if labs.inDeepSpace then
 				labs.inDeepSpace = false
@@ -2565,7 +2575,7 @@ do
 		local pPos = root.Position + Vector3.new(math.random(-25, 25), 8, math.random(-25, 25))
 		local m = Instance.new("Model")
 		m.Name = (probeType == "comms") and "OrbitalCommsRelay" or "OrbitalResearchProbe"
-		
+
 		local core = Instance.new("Part")
 		core.Name = "Core"
 		core.Size = Vector3.new(3, 3, 3)
@@ -2576,7 +2586,7 @@ do
 		core.CanCollide = false
 		core.Parent = m
 		m.PrimaryPart = core
-		
+
 		local dish = Instance.new("Part")
 		dish.Name = "Dish"
 		dish.Shape = Enum.PartType.Cylinder
@@ -2590,9 +2600,47 @@ do
 
 		local pL = Instance.new("PointLight")
 		pL.Color = (probeType == "comms") and Color3.fromRGB(75, 185, 255) or Color3.fromRGB(255, 180, 50)
-		pL.Range = 32
-		pL.Brightness = 2.5
+		pL.Range = 36
+		pL.Brightness = 3.0
 		pL.Parent = core
+
+		-- Nadir holographic earth scan beam
+		local scanBeam = Instance.new("Part")
+		scanBeam.Name = "ScanBeam"
+		scanBeam.Shape = Enum.PartType.Cylinder
+		scanBeam.Size = Vector3.new(65, 0.22, 0.22)
+		scanBeam.CFrame = CFrame.new(pPos + Vector3.new(0, -32.5, 0)) * CFrame.Angles(0, 0, math.rad(90))
+		scanBeam.Color = (probeType == "comms") and Color3.fromRGB(75, 205, 255) or Color3.fromRGB(255, 175, 45)
+		scanBeam.Material = Enum.Material.Neon
+		scanBeam.Transparency = 0.45
+		scanBeam.Anchored = true
+		scanBeam.CanCollide = false
+		scanBeam.Parent = m
+
+		-- Telemetry HUD Signal Marker
+		local bg = Instance.new("BillboardGui")
+		bg.Name = "TelemetrySignal"
+		bg.Size = UDim2.fromOffset(180, 32)
+		bg.StudsOffset = Vector3.new(0, 3.6, 0)
+		bg.AlwaysOnTop = true
+		bg.MaxDistance = 500
+		bg.Adornee = core
+		bg.Parent = core
+		local sigCol = (probeType == "comms") and Color3.fromRGB(130, 215, 255) or Color3.fromRGB(255, 215, 120)
+		local sigText = (probeType == "comms") and "🛰 COMMS RELAY · TX ACTIVE\nCH-04 · 1420.4 MHz · ORBIT" or "🔬 SCIENTIFIC PROBE · SCANNING\nCH-01 · TELEMETRY BEACON"
+		makeText(bg, sigText, 8, sigCol, FONT_BOLD, {Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center})
+
+		-- 3D Spatial Radio Pulse Audio
+		local snd = Instance.new("Sound")
+		snd.Name = "ProbeAudio"
+		snd.SoundId = "rbxassetid://9112801967"
+		snd.Volume = 0.28
+		snd.PlaybackSpeed = (probeType == "comms") and 1.75 or 1.35
+		snd.Looped = true
+		snd.RollOffMode = Enum.RollOffMode.InverseTapered
+		snd.MaxDistance = 140
+		snd.Parent = core
+		snd:Play()
 
 		for side = -1, 1, 2 do
 			local wing = Instance.new("Part")
@@ -2625,6 +2673,174 @@ do
 			end
 		end
 		setStatus("PROBES CLEARED", "All deployed orbital satellites and scientific beacons retrieved.", C.muted)
+	end
+
+	fn.stopReentryVFX = function(char)
+		labs.reentryActive = false
+		labs.reentryIntensity = 0
+		labs.reentrySoundTime = 0
+		planet.shakeActive = false
+		planet.shakeIntensity = 0
+
+		-- 1. Stop and destroy sound immediately (no lingering roar)
+		if labs.reentrySound then
+			pcall(function()
+				labs.reentrySound:Stop()
+				labs.reentrySound:Destroy()
+			end)
+			labs.reentrySound = nil
+		end
+
+		-- 2. Immediately turn off and destroy torso light (no lingering orange glow)
+		if labs.reentryLight then
+			pcall(function()
+				labs.reentryLight.Enabled = false
+				labs.reentryLight:Destroy()
+			end)
+			labs.reentryLight = nil
+		end
+
+		-- 3. Emitter: stop emitting new particles, allow existing particles to finish lifetime, then delete
+		if labs.reentryEmitter and labs.reentryEmitter.Parent then
+			pcall(function()
+				labs.reentryEmitter.Enabled = false
+				local pe = labs.reentryEmitter
+				game:GetService("Debris"):AddItem(pe, 3.5)
+			end)
+			labs.reentryEmitter = nil
+		end
+
+		-- 4. Purge any orphaned lights, sounds or emitters on character
+		local c = char or LocalPlayer.Character
+		if c then
+			for _, obj in ipairs(c:GetDescendants()) do
+				if obj.Name == "SiriusReentryLight" then
+					pcall(function()
+						if obj:IsA("PointLight") then obj.Enabled = false end
+						obj:Destroy()
+					end)
+				elseif obj.Name == "SiriusReentrySound" then
+					pcall(function()
+						if obj:IsA("Sound") then obj:Stop() end
+						obj:Destroy()
+					end)
+				elseif obj.Name == "SiriusReentryPlasma" and obj:IsA("ParticleEmitter") then
+					obj.Enabled = false
+					pcall(function() game:GetService("Debris"):AddItem(obj, 3.5) end)
+				end
+			end
+		end
+
+		pcall(function()
+			for _, s in ipairs(game:GetService("SoundService"):GetDescendants()) do
+				if s.Name == "SiriusReentrySound" then
+					s:Stop()
+					s:Destroy()
+				end
+			end
+		end)
+
+		if ui and ui.plasmaOverlay then
+			ui.plasmaOverlay.Visible = false
+		end
+	end
+
+	fn.startReentryVFX = function(char)
+		if labs.reentryActive then return end
+		local c = char or LocalPlayer.Character
+		if not c then return end
+		local torso = c:FindFirstChild("UpperTorso") or c:FindFirstChild("Torso") or c:FindFirstChild("HumanoidRootPart")
+		if not torso then return end
+
+		-- Ensure any stale lights or sounds are completely removed before spawning new ones
+		for _, obj in ipairs(c:GetDescendants()) do
+			if obj.Name == "SiriusReentryLight" or obj.Name == "SiriusReentrySound" then
+				pcall(function()
+					if obj:IsA("PointLight") then obj.Enabled = false end
+					if obj:IsA("Sound") then obj:Stop() end
+					obj:Destroy()
+				end)
+			end
+		end
+
+		labs.reentryActive = true
+		labs.reentrySoundTime = 0
+
+		-- 1. Animated Flipbook Explosion Particle Emitter (Exact User Specifications)
+		local pe = Instance.new("ParticleEmitter")
+		pe.Name = "SiriusReentryPlasma"
+		pe.Texture = "rbxassetid://15194500627"
+
+		-- Flipbook Animation
+		pcall(function()
+			pe.FlipbookLayout = Enum.ParticleFlipbookLayout.Grid8x8
+			pe.FlipbookMode = Enum.ParticleFlipbookMode.OneShot
+			pe.FlipbookStartRandom = false
+			pe.FlipbookFramerate = NumberRange.new(1, 1)
+		end)
+
+		-- Appearance
+		pe.Color = ColorSequence.new(Color3.fromRGB(255, 142, 144))
+		pe.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.266497, 0),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		pe.Size = NumberSequence.new(20, 20)
+		pcall(function() pe.Squash = NumberSequence.new(0, 0) end)
+		pe.LightEmission = 0.2
+		pe.LightInfluence = 0
+		pcall(function() pe.Brightness = 5 end)
+		pe.ZOffset = 1
+
+		-- Emission Settings
+		pe.Enabled = true
+		pe.Rate = 500
+		pe.Lifetime = NumberRange.new(3, 3)
+		pe.Speed = NumberRange.new(0, 2)
+		pe.TimeScale = 1
+		pe.Drag = 1
+		pe.VelocityInheritance = 0
+		pe.Acceleration = Vector3.new(0, 0, 0)
+		pe.EmissionDirection = Enum.NormalId.Top
+		pe.SpreadAngle = Vector2.new(75, 75)
+
+		-- Rotation Settings
+		pe.Rotation = NumberRange.new(-180, 180)
+		pe.RotSpeed = NumberRange.new(0, 0)
+		pe.Orientation = Enum.ParticleOrientation.FacingCamera
+
+		-- Emission Shape
+		pcall(function()
+			pe.Shape = Enum.ParticleEmitterShape.Sphere
+			pe.ShapeInOut = Enum.ParticleEmitterShapeInOut.Outward
+			pe.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+		end)
+		pe.LockedToPart = false
+		pcall(function() pe.WindAffectsDrag = false end)
+		pe.Parent = torso
+		labs.reentryEmitter = pe
+
+		-- 2. Really Bright Orange Torso Light
+		local light = Instance.new("PointLight")
+		light.Name = "SiriusReentryLight"
+		light.Color = Color3.fromRGB(255, 135, 40)
+		light.Brightness = 8
+		light.Range = 36
+		light.Shadows = false
+		light.Parent = torso
+		labs.reentryLight = light
+
+		-- 3. Atmospheric Re-entry Acoustic Shockwave Sound (9104875504)
+		local snd = Instance.new("Sound")
+		snd.Name = "SiriusReentrySound"
+		snd.SoundId = "rbxassetid://9104875504"
+		snd.Volume = 0.05 -- starts fade in
+		snd.PlaybackSpeed = 0.35 -- starts really low pitch
+		snd.Looped = true
+		snd.Parent = torso
+		snd:Play()
+		labs.reentrySound = snd
 	end
 
 	fn.setSpaceAudioMode = function(mode)
@@ -3283,7 +3499,7 @@ do
 		end
 	end
 
-	local ui = {
+	for k, v in pairs({
 		pages = {}, pagePads = {}, pageSections = {}, sheenGrads = {},
 		fieldWidgets = {}, customKnobs = {}, sizeChipButtons = {},
 		styleButtons = {}, biomeCards = {}, themeButtons = {}, waterButtons = {}, synthDeckCards = {},
@@ -3304,7 +3520,7 @@ do
 		taskbarButton = nil, taskbarStroke = nil, taskbarStrokeGrad = nil,
 		tbHairline = nil, tbLogoGrad = nil, tbClickArea = nil, tbTitle = nil, tbStatus = nil,
 		tbRestoreBtn = nil, tbBrushBtn = nil, tbCloseBtn = nil,
-	}
+		}) do ui[k] = v end
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = K.GUI_NAME; gui.ResetOnSpawn = false; gui.IgnoreGuiInset = false
@@ -3978,10 +4194,30 @@ do
 		ui.previewPendingRelease, ui.previewDirty, atlas.dirty = false, true, true
 	end
 
+	fn.updateScaleLagWarning = function()
+		local w = tonumber(values.Width) or 256
+		local d = tonumber(values.Depth) or 256
+		local isLag = (w > 8000 or d > 8000)
+		if ui.lagBanner then
+			ui.lagBanner.Visible = isLag
+			if isLag then
+				local tilesX = math.ceil(w / 384)
+				local tilesZ = math.ceil(d / 384)
+				local approxTiles = tilesX * tilesZ
+				local maxDim = math.max(w, d)
+				local severity = maxDim >= 18000 and "EXTREME" or (maxDim >= 12000 and "CRITICAL" or "ELEVATED")
+				if ui.lagDesc then
+					ui.lagDesc.Text = string.format("[%s RISK] %d × %d studs (>8K threshold) · ~%d streaming tiles · Heavy voxel generation load!", severity, w, d, approxTiles)
+				end
+			end
+		end
+	end
+
 	local function refreshSizeChips()
 		for sz, btn in pairs(ui.sizeChipButtons) do
 			setButtonState(btn, {selected = (values.Width == sz and values.Depth == sz)})
 		end
+		if fn.updateScaleLagWarning then fn.updateScaleLagWarning() end
 	end
 
 	local function setValue(key, value, quiet, animateWidget)
@@ -3996,7 +4232,10 @@ do
 			if ui.fieldWidgets[partner] then ui.fieldWidgets[partner].refresh(q, animateWidget) end
 			ui.syncingSquare = false
 		end
-		if key == "Width" or key == "Depth" then refreshSizeChips() end
+		if key == "Width" or key == "Depth" then
+			refreshSizeChips()
+			if fn.updateScaleLagWarning then fn.updateScaleLagWarning() end
+		end
 		if not quiet then requestPreview() end
 		return q
 	end
@@ -4081,7 +4320,7 @@ do
 		local cardStroke = stroke(card, C.stroke, 0.5)
 		pad(card, 7, 10, 7, 10)
 
-		makeText(card, string.upper(spec.label), 9, C.muted, FONT_BOLD, {Position = UDim2.fromOffset(0, 1), Size = UDim2.new(1, -68, 0, 18), TextTruncate = Enum.TextTruncate.AtEnd})
+		local titleLbl = makeText(card, string.upper(spec.label), 9, C.muted, FONT_BOLD, {Position = UDim2.fromOffset(0, 1), Size = UDim2.new(1, -68, 0, 18), TextTruncate = Enum.TextTruncate.AtEnd})
 		local box = new("TextBox", card, {
 			AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.fromOffset(64, 20),
 			BackgroundColor3 = C.inset, BorderSizePixel = 0, ClearTextOnFocus = false, Text = fmt(curVal),
@@ -4095,10 +4334,21 @@ do
 
 		local fill = new("Frame", track, {Size = UDim2.fromScale(0, 1), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0})
 		corner(fill, 3)
-		new("UIGradient", fill, {Color = ColorSequence.new({ColorSequenceKeypoint.new(0, softColor), ColorSequenceKeypoint.new(0.62, barColor), ColorSequenceKeypoint.new(1, paleColor)})})
+		local fillGrad = new("UIGradient", fill, {Color = ColorSequence.new({ColorSequenceKeypoint.new(0, softColor), ColorSequenceKeypoint.new(0.62, barColor), ColorSequenceKeypoint.new(1, paleColor)})})
 
 		local knob = new("Frame", track, {AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0, 0.5), Size = UDim2.fromOffset(11, 11), BackgroundColor3 = C.text, BorderSizePixel = 0, ZIndex = 2})
-		corner(knob, 6); stroke(knob, barColor, 0.08, 1.5)
+		corner(knob, 6); local knobStroke = stroke(knob, barColor, 0.08, 1.5)
+
+		local isDimension = (spec.key == "Width" or spec.key == "Depth")
+		if isDimension then
+			local markerAlpha = clamp((8000 - spec.min) / (spec.max - spec.min), 0, 1)
+			local marker = new("Frame", track, {
+				AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(markerAlpha, 0, 0.5, 0),
+				Size = UDim2.new(0, 2, 1, 4), BackgroundColor3 = Color3.fromRGB(255, 75, 95),
+				BorderSizePixel = 0, ZIndex = 3,
+			})
+			corner(marker, 1)
+		end
 
 		local function refresh(v, animated)
 			curVal = v
@@ -4109,6 +4359,41 @@ do
 				tween(knob, 0.24, {Position = UDim2.fromScale(alpha, 0.5)})
 			else
 				fill.Size = UDim2.fromScale(alpha, 1); knob.Position = UDim2.fromScale(alpha, 0.5)
+			end
+
+			if isDimension then
+				local isLag = (v > 8000)
+				if isLag then
+					local intensity = clamp((v - 8000) / (spec.max - 8000), 0, 1)
+					local warnColor = Color3.fromRGB(255, math.floor(135 - intensity * 50), math.floor(70 - intensity * 25))
+					titleLbl.Text = string.format("%s ⚠ LAG", string.upper(spec.label))
+					titleLbl.TextColor3 = warnColor
+					box.TextColor3 = warnColor
+					boxStroke.Color = warnColor
+					boxStroke.Transparency = 0.2
+					fillGrad.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0, Color3.fromRGB(180, 80, 20)),
+						ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 110, 40)),
+						ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 55, 75)),
+					})
+					cardStroke.Color = warnColor
+					cardStroke.Transparency = 0.3
+					knobStroke.Color = warnColor
+				else
+					titleLbl.Text = string.upper(spec.label)
+					titleLbl.TextColor3 = C.muted
+					box.TextColor3 = C.text
+					boxStroke.Color = C.stroke
+					boxStroke.Transparency = 0.55
+					fillGrad.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0, softColor),
+						ColorSequenceKeypoint.new(0.62, barColor),
+						ColorSequenceKeypoint.new(1, paleColor),
+					})
+					cardStroke.Color = C.stroke
+					cardStroke.Transparency = 0.5
+					knobStroke.Color = barColor
+				end
 			end
 		end
 
@@ -4129,30 +4414,51 @@ do
 
 		hitArea.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				if spec.hint and not state.busy then setStatus(spec.label, spec.hint, C.muted) end
+				if spec.hint and not state.busy then
+					if isDimension and curVal > 8000 then
+						setStatus("⚠ HIGH VOXEL LOAD", string.format("%s (%d studs) exceeds 8,000 threshold. Extreme streaming area!", spec.label, curVal), C.rosePale)
+					else
+						setStatus(spec.label, spec.hint, C.muted)
+					end
+				end
 				playUISound("click", 1.06, 0.45)
 				tween(knob, 0.14, {Size = UDim2.fromOffset(14, 14)})
-				tween(cardStroke, 0.16, {Color = barColor, Transparency = 0.18})
+				tween(cardStroke, 0.16, {Color = (isDimension and curVal > 8000) and Color3.fromRGB(255, 80, 95) or barColor, Transparency = 0.18})
 				ui.activeSlider = setFromX; setFromX(input.Position.X)
 			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then resetDefault() end
 		end)
 		card.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton2 then resetDefault() end end)
 		hitArea.MouseEnter:Connect(function() tween(knob, 0.16, {Size = UDim2.fromOffset(13, 13)}) end)
 		hitArea.MouseLeave:Connect(function() if ui.activeSlider ~= setFromX then tween(knob, 0.16, {Size = UDim2.fromOffset(11, 11)}) end end)
-		card.MouseEnter:Connect(function() if ui.activeSlider ~= setFromX then tween(cardStroke, 0.2, {Color = C.strokeHi, Transparency = 0.22}) end end)
-		card.MouseLeave:Connect(function() if ui.activeSlider ~= setFromX then tween(cardStroke, 0.2, {Color = C.stroke, Transparency = 0.5}) end end)
+		card.MouseEnter:Connect(function() if ui.activeSlider ~= setFromX then tween(cardStroke, 0.2, {Color = (isDimension and curVal > 8000) and Color3.fromRGB(255, 100, 115) or C.strokeHi, Transparency = 0.22}) end end)
+		card.MouseLeave:Connect(function()
+			if ui.activeSlider ~= setFromX then
+				local isLag = isDimension and (curVal > 8000)
+				tween(cardStroke, 0.2, {Color = isLag and Color3.fromRGB(255, 85, 105) or C.stroke, Transparency = isLag and 0.3 or 0.5})
+			end
+		end)
 		box.Focused:Connect(function()
-			if spec.hint and not state.busy then setStatus(spec.label, spec.hint, C.muted) end
-			tween(boxStroke, 0.2, {Color = barColor, Transparency = 0.1})
+			if spec.hint and not state.busy then
+				if isDimension and curVal > 8000 then
+					setStatus("⚠ HIGH VOXEL LOAD", string.format("%s (%d studs) exceeds 8,000 threshold. Extreme streaming area!", spec.label, curVal), C.rosePale)
+				else
+					setStatus(spec.label, spec.hint, C.muted)
+				end
+			end
+			tween(boxStroke, 0.2, {Color = (isDimension and curVal > 8000) and Color3.fromRGB(255, 85, 105) or barColor, Transparency = 0.1})
 		end)
 		box.FocusLost:Connect(function()
-			tween(boxStroke, 0.2, {Color = C.stroke, Transparency = 0.55})
+			tween(boxStroke, 0.2, {Color = (isDimension and curVal > 8000) and Color3.fromRGB(255, 85, 105) or C.stroke, Transparency = 0.55})
 			local v = snap(box.Text); spec.set(v, true); refresh(spec.get(), true); playUISound("click", 1.02, 0.5)
 		end)
 
 		local handle = {
 			refresh = refresh,
-			resetKnob = function() tween(knob, 0.18, {Size = UDim2.fromOffset(11, 11)}); tween(cardStroke, 0.2, {Color = C.stroke, Transparency = 0.5}) end,
+			resetKnob = function()
+				tween(knob, 0.18, {Size = UDim2.fromOffset(11, 11)})
+				local isLag = isDimension and (curVal > 8000)
+				tween(cardStroke, 0.2, {Color = isLag and Color3.fromRGB(255, 85, 105) or C.stroke, Transparency = isLag and 0.3 or 0.5})
+			end,
 		}
 		table.insert(ui.customKnobs, handle)
 		refresh(curVal, false)
@@ -4163,6 +4469,7 @@ do
 		local f = FIELDS[key]
 		if not f then return end
 		local w = makeCustomSlider(parent, {
+			key = key,
 			label = f.label, min = f.min, max = f.max, step = f.step, default = f.default, hint = f.hint,
 			get = function() return values[key] end,
 			set = function(v, animated) setValue(key, v, false, animated); if onEdit then onEdit() end end,
@@ -4272,7 +4579,7 @@ do
 		local chipHolder = new("Frame", quickRow, {Position = UDim2.fromOffset(176, 0), Size = UDim2.new(1, -176, 1, 0), BackgroundTransparency = 1})
 		new("UIGridLayout", chipHolder, {CellSize = UDim2.new(1 / #QUICK_SIZES, -6, 1, 0), CellPadding = UDim2.fromOffset(6, 0), SortOrder = Enum.SortOrder.LayoutOrder})
 		for idx, sz in ipairs(QUICK_SIZES) do
-			local chip = makeButton(chipHolder, sz == 7168 and "7168 MAX" or tostring(sz), {LayoutOrder = idx}, {selected = (values.Width == sz and values.Depth == sz), textSize = 9})
+			local chip = makeButton(chipHolder, sz == 21504 and "21504 MAX" or tostring(sz), {LayoutOrder = idx}, {selected = (values.Width == sz and values.Depth == sz), textSize = 9})
 			ui.sizeChipButtons[sz] = chip
 			onClick(chip, function()
 				ui.syncingSquare = true
@@ -4280,11 +4587,42 @@ do
 				if ui.fieldWidgets.Width then ui.fieldWidgets.Width.refresh(sz, true) end
 				if ui.fieldWidgets.Depth then ui.fieldWidgets.Depth.refresh(sz, true) end
 				ui.syncingSquare = false; refreshSizeChips(); requestPreview(true)
-				setStatus("MAP FOOTPRINT", string.format("Set footprint to %d × %d studs.", sz, sz), C.accentPale)
+				if sz > 8000 then
+					setStatus("⚠ SCALE LAG WARNING", string.format("Set footprint to extreme %d × %d studs. Expect high voxel density & generation time.", sz, sz), C.rosePale)
+				else
+					setStatus("MAP FOOTPRINT", string.format("Set footprint to %d × %d studs.", sz, sz), C.accentPale)
+				end
 			end)
 		end
 
-		local shapeGrid = makeGrid(shapeSec, 4, 54, 2, 8)
+		local lagBanner = new("Frame", shapeSec, {
+			Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = Color3.fromRGB(36, 14, 18),
+			BackgroundTransparency = 0.12, BorderSizePixel = 0, LayoutOrder = 2,
+			Visible = false, ClipsDescendants = true,
+		})
+		corner(lagBanner, 8)
+		local lagStroke = stroke(lagBanner, Color3.fromRGB(255, 75, 95), 0.3, 1.2)
+		pad(lagBanner, 0, 12, 0, 12); surfaceSheen(lagBanner, 90)
+
+		local lagTag = new("Frame", lagBanner, {
+			AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.fromOffset(142, 20),
+			BackgroundColor3 = Color3.fromRGB(56, 18, 24), BackgroundTransparency = 0.1, BorderSizePixel = 0,
+		})
+		corner(lagTag, 4); stroke(lagTag, Color3.fromRGB(255, 95, 115), 0.4)
+		makeText(lagTag, "⚠ DYNAMIC LAG WARNING", 8, Color3.fromRGB(255, 140, 150), FONT_BOLD, {
+			Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center,
+		})
+
+		local lagDesc = makeText(lagBanner, "", 9, Color3.fromRGB(250, 205, 210), FONT_MED, {
+			AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 152, 0.5, 0), Size = UDim2.new(1, -156, 0, 20),
+			TextTruncate = Enum.TextTruncate.AtEnd,
+		})
+		ui.lagBanner = lagBanner
+		ui.lagDesc = lagDesc
+		ui.lagStroke = lagStroke
+		if fn.updateScaleLagWarning then fn.updateScaleLagWarning() end
+
+		local shapeGrid = makeGrid(shapeSec, 4, 54, 3, 8)
 		for idx, key in ipairs(SHAPE_KEYS) do
 			makeSliderField(shapeGrid, key, idx, key == "GrassLength" and function() pcall(function() Terrain.GrassLength = values.GrassLength end) end or nil)
 		end
@@ -5169,6 +5507,7 @@ do
 			local char = LocalPlayer.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			if root then
+				if fn.stopReentryVFX then fn.stopReentryVFX(char) end
 				pcall(function() char:PivotTo(CFrame.new(root.Position.X, 64, root.Position.Z)) end)
 				fn.switchPage("Terrain", false)
 				setStatus("TOUCHDOWN", "Returned to surface level. Space radar deactivated.", C.muted)
@@ -5800,7 +6139,7 @@ do
 		makeModularSwitch(tSwGrid, "Adaptive Terrain Metrics Sync", "Adapts tree count, scale, max slope, snowline & foliage tint to current biome.", "ADAPTIVE", labs.treesAdaptive, "rose", 2, function(on) labs.treesAdaptive = on end)
 
 		local tSlGrid = makeGrid(treeSec, 4, 54, 3, 8)
-		makeCustomSlider(tSlGrid, {label = "Spread intensity", min = 0.10, max = 2.50, step = 0.05, default = 1.00, get = function() return labs.spreadIntensity end, set = function(v) labs.spreadIntensity = v end}, 1, "rose")
+		makeCustomSlider(tSlGrid, {label = "Spread intensity", min = 0.10, max = 40.00, step = 0.05, default = 1.00, get = function() return labs.spreadIntensity end, set = function(v) labs.spreadIntensity = v end}, 1, "rose")
 		makeCustomSlider(tSlGrid, {label = "Base tree scale", min = 0.35, max = 2.20, step = 0.05, default = 0.85, get = function() return labs.baseScale end, set = function(v) labs.baseScale = v end}, 2, "rose")
 		makeCustomSlider(tSlGrid, {label = "Random size var.", min = 0.00, max = 0.75, step = 0.05, default = 0.30, get = function() return labs.sizeVariance end, set = function(v) labs.sizeVariance = v end}, 3, "rose")
 		makeCustomSlider(tSlGrid, {label = "Max slope limit", min = 0.25, max = 1.20, step = 0.05, default = 0.68, get = function() return labs.maxSlope end, set = function(v) labs.maxSlope = v end}, 4, "rose")
@@ -5891,6 +6230,7 @@ do
 			local char = LocalPlayer.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			if root then
+				if fn.stopReentryVFX then fn.stopReentryVFX(char) end
 				pcall(function() char:PivotTo(CFrame.new(root.Position.X, 64, root.Position.Z)) end)
 				setStatus("SURFACE TOUCHDOWN", "Returned safely to terrain surface level.", C.skyPale)
 			end
@@ -7071,6 +7411,10 @@ do
 		local now = os.clock()
 		smoothFps = lerp(smoothFps, 1 / math.max(dt, 1 / 240), clamp(dt * 8, 0, 1))
 
+		if ui.lagBanner and ui.lagBanner.Visible and ui.lagStroke then
+			ui.lagStroke.Transparency = 0.20 + 0.18 * math.sin(now * 4.5)
+		end
+
 		-- 1. Live 8-Shell 3D Planetarium Rotation, Tangent Plates, Calderas, Cloud Belts & Keplerian Moons
 		if gui.Enabled and shell.Visible and state.activePage == "Planet" and ui.planet then
 			local p = ui.planet
@@ -7219,9 +7563,12 @@ do
 					labs.orbitEarthParts.p2.CFrame = CFrame.new(cx, 2000.0293, cz) * rot
 				end
 
-				-- 1. Space Boundary Detection, Deep Space Skybox & 12.0 Midday ClockTime
-				local inSpace = (labs.spaceFactor >= 0.88 or curY >= (spaceY - 400))
-				if inSpace then
+				-- 1. Space Boundary Detection, Night Departure & Atmospheric Daylight Transition
+				local spaceEngageY = spaceY - 400 -- 9600 st
+				local atmoEntryY = spaceY - 1000 -- 9000 st
+
+				if curY >= spaceEngageY then
+					-- Full Deep Space Cosmos
 					if not labs.inDeepSpace then
 						labs.inDeepSpace = true
 						local ps = fn.getPlanetSpec(planet.selectedId or planet.archetype)
@@ -7229,30 +7576,47 @@ do
 						if labs.previousSkyboxKey == "DeepSpace" then labs.previousSkyboxKey = "Earthly" end
 						fn.applySkybox("DeepSpace")
 					end
-					-- Instantly 12.0 ClockTime in deep space as requested
 					pcall(function() Lighting.ClockTime = 12.0 end)
-				else
-					if labs.inDeepSpace then
-						labs.inDeepSpace = false
-						local prevKey = labs.previousSkyboxKey
-						if not prevKey or prevKey == "DeepSpace" then
-							local ps = fn.getPlanetSpec(planet.selectedId or planet.archetype)
-							prevKey = (ps and ps.skyboxKey) or (planet and planet.archetype) or "Earthly"
-						end
-						fn.applySkybox(prevKey)
-					else
-						-- Ensure SiriusPlanetSky does NOT show DeepSpace cosmos while on surface
-						local sky = Lighting:FindFirstChild("SiriusPlanetSky")
-						if sky and sky.SkyboxBk == "rbxassetid://243002141" then
-							local ps = fn.getPlanetSpec(planet.selectedId or planet.archetype)
-							local prevKey = (ps and ps.skyboxKey) or (planet and planet.archetype) or "Earthly"
-							if prevKey == "DeepSpace" then prevKey = "Earthly" end
-							fn.applySkybox(prevKey)
+				elseif curY >= atmoEntryY then
+					-- Leaving Space: "make it night when its gonna disappear, then remove the sky"
+					local nightProgress = clamp((spaceEngageY - curY) / math.max(1, spaceEngageY - atmoEntryY), 0, 1)
+					pcall(function()
+						Lighting.ClockTime = lerp(12.0, 0.0, nightProgress)
+					end)
+					if nightProgress >= 0.85 then
+						if labs.inDeepSpace then
+							labs.inDeepSpace = false
+							local sky = Lighting:FindFirstChild("SiriusPlanetSky")
+							if sky then pcall(function() sky:Destroy() end) end
 						end
 					end
-					-- Gradual lighting transition through atmosphere
+				else
+					-- In Atmosphere: "and when the player gets to the atmosphere you transition into day"
+					if labs.inDeepSpace then
+						labs.inDeepSpace = false
+						local sky = Lighting:FindFirstChild("SiriusPlanetSky")
+						if sky then pcall(function() sky:Destroy() end) end
+					end
+
+					-- Smoothly transition from night (0.0) into full day (14.0 / surfaceClockTime)
+					local dayProgress = clamp((atmoEntryY - curY) / 7000, 0, 1)
 					local surfClock = labs.surfaceClockTime or 14.0
-					pcall(function() Lighting.ClockTime = lerp(surfClock, 12.0, labs.spaceFactor) end)
+					pcall(function()
+						Lighting.ClockTime = lerp(0.0, surfClock, dayProgress)
+					end)
+
+					-- Restore daytime planetary skybox as atmosphere thickens
+					local ps = fn.getPlanetSpec(planet.selectedId or planet.archetype)
+					local prevKey = labs.previousSkyboxKey
+					if not prevKey or prevKey == "DeepSpace" then
+						prevKey = (ps and ps.skyboxKey) or (planet and planet.archetype) or "Earthly"
+					end
+					if prevKey == "DeepSpace" then prevKey = "Earthly" end
+
+					local curSky = Lighting:FindFirstChild("SiriusPlanetSky")
+					if not curSky or curSky.SkyboxBk == "rbxassetid://243002141" then
+						fn.applySkybox(prevKey)
+					end
 				end
 
 				-- Mute all game audio in deep space vacuum
@@ -7345,25 +7709,58 @@ do
 					if bv then pcall(function() bv:Destroy() end) end
 				end
 
-				-- 4. Re-Entry Compression Heating & Plasma Glow
+				-- 4. Re-Entry Compression Heating, Flipbook Plasma VFX & Shockwave Audio (9104875504)
 				local downSpeed = -root.AssemblyLinearVelocity.Y
-				local inTransitionLayer = (labs.spaceFactor > 0.04 and labs.spaceFactor < 0.94)
-				local targetHeat = 0
-				if inTransitionLayer and downSpeed > 70 and labs.reentryPlasma then
-					local density = 1 - labs.spaceFactor
-					targetHeat = clamp(((downSpeed - 70) / 160) * density * 1.8, 0, 1)
+				-- Sound and emitter appear 500 studs after entering the atmosphere (9,300 st down to 1,200 st)
+				local inAtmosphere = (curY < 9300 and curY > 1200)
+				local isPlunging = (downSpeed > 55)
+
+				if inAtmosphere and isPlunging and labs.reentryPlasma then
+					local atmoDensity = clamp((9300 - curY) / 5500, 0.12, 1.0)
+					local targetHeat = clamp(((downSpeed - 45) / 135) * atmoDensity * 1.5, 0.25, 1.0)
+					labs.reentryIntensity = lerp(labs.reentryIntensity or 0, targetHeat, clamp(dt * 6, 0, 1))
+
+					-- Start flipbook particle emitter, torso light & sound if not active
+					if not labs.reentryActive then
+						fn.startReentryVFX(LocalPlayer.Character)
+					end
+
+					-- Sound 9104875504: smooth fade-in volume & smooth low-to-normal pitch transition
+					if labs.reentrySound and labs.reentrySound.Parent then
+						labs.reentrySoundTime = (labs.reentrySoundTime or 0) + dt
+						local pitchProgress = clamp(labs.reentrySoundTime / 2.8, 0, 1)
+						local targetPitch = lerp(0.35, 1.0, pitchProgress)
+						labs.reentrySound.PlaybackSpeed = lerp(labs.reentrySound.PlaybackSpeed, targetPitch, clamp(dt * 4, 0, 1))
+
+						local targetVol = clamp((labs.reentryIntensity or 0.5) * 0.90, 0.22, 0.95) * (state.soundVolume or 0.45)
+						labs.reentrySound.Volume = lerp(labs.reentrySound.Volume, targetVol, clamp(dt * 3.5, 0, 1))
+					end
+
+					-- Screen shake continuously until re-entry stops!
+					planet.shakeActive = true
+					planet.shakeIntensity = math.max(planet.shakeIntensity, 0.62 * (labs.reentryIntensity or 0.5))
+					planet.shakeStartTime = os.clock()
+					planet.shakeDuration = 0.5
+
+					-- Aerodynamic air-braking drag in denser atmosphere
 					if labs.airBraking and labs.airBraking > 0 then
-						local dragImpulse = downSpeed * density * (labs.airBraking * 0.45) * dt
+						local dragImpulse = downSpeed * atmoDensity * (labs.airBraking * 0.48) * dt
 						root.AssemblyLinearVelocity = root.AssemblyLinearVelocity + Vector3.new(0, dragImpulse, 0)
 					end
-					if targetHeat > 0.25 then
-						fn.triggerScreenShake(targetHeat * 0.24, 0.3)
+
+					if ui and ui.plasmaOverlay then
+						ui.plasmaOverlay.Visible = true
+						ui.plasmaOverlay.BackgroundTransparency = clamp(1 - (labs.reentryIntensity or 0.5) * 0.55, 0.45, 1)
 					end
-				end
-				labs.reentryIntensity = lerp(labs.reentryIntensity, targetHeat, clamp(dt * 7, 0, 1))
-				if ui.plasmaOverlay then
-					ui.plasmaOverlay.Visible = labs.reentryIntensity > 0.01
-					ui.plasmaOverlay.BackgroundTransparency = clamp(1 - labs.reentryIntensity * 0.52, 0.45, 1)
+				else
+					-- Re-entry finished or not plunging: IMMEDIATELY stop VFX, light, and sound!
+					if labs.reentryActive or labs.reentryLight or labs.reentrySound or labs.reentryEmitter then
+						fn.stopReentryVFX(LocalPlayer.Character)
+					end
+					labs.reentryIntensity = 0
+					if ui and ui.plasmaOverlay then
+						ui.plasmaOverlay.Visible = false
+					end
 				end
 
 				-- 5. Cosmic Vacuum Acoustic Absorption
@@ -7389,6 +7786,25 @@ do
 					local pressPct = round((1 - labs.spaceFactor) * 100)
 					local gravG = string.format("%.2f", workspace.Gravity / 196.2)
 					ui.atmoHudLabel.Text = string.format("ALT: %d st (%s km)  ·  %s  ·  PRESSURE: %d%%  ·  GRAV: %sg", altStuds, altKm, layerName, pressPct, gravG)
+				end
+			end
+		end
+
+		-- Animated Orbital Probes Telemetry & Pulsing Signals
+		if #labs.spaceProbes > 0 then
+			for _, probe in ipairs(labs.spaceProbes) do
+				if probe and probe.Parent then
+					local dish = probe:FindFirstChild("Dish")
+					if dish then dish.CFrame = dish.CFrame * CFrame.Angles(0, dt * 0.65, 0) end
+					local core = probe:FindFirstChild("Core")
+					if core then
+						local pl = core:FindFirstChildOfClass("PointLight")
+						if pl then pl.Brightness = 2.2 + 1.6 * math.sin(now * 4.5) end
+					end
+					local beam = probe:FindFirstChild("ScanBeam")
+					if beam then
+						beam.Transparency = 0.40 + 0.20 * math.sin(now * 3.0)
+					end
 				end
 			end
 		end
@@ -7630,6 +8046,7 @@ do
 		if planet.liveSkySync or planet.liveGravitySync or planet.autoSkySync or planet.audioEnabled or state.worldLowGravity then fn.restoreOriginalEnvironment() end
 		fn.stopPlanetAudio()
 		if fn.removeOrbitEarth then fn.removeOrbitEarth() end
+		if fn.stopReentryVFX then fn.stopReentryVFX() end
 		if fn.clearOrbitalProbes then fn.clearOrbitalProbes() end
 		pcall(function()
 			local sa = game:GetService("SoundService"):FindFirstChild("SiriusSpaceAudio")
@@ -7659,6 +8076,10 @@ do
 	end
 	onClick(ui.closeButton, requestClose)
 	if ui.tbCloseBtn then onClick(ui.tbCloseBtn, requestClose) end
+
+	table.insert(connections, LocalPlayer.CharacterAdded:Connect(function(c)
+		if fn.stopReentryVFX then fn.stopReentryVFX(c) end
+	end))
 
 	gui.Parent = PlayerGui
 	fn.updatePlanetVisuals()
