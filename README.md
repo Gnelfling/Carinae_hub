@@ -26,3 +26,7 @@ This repository is continuously maintained and may evolve as new utilities are a
 ## License
 
 Unless otherwise specified, refer to the license or usage terms provided with each individual project.
+
+# Hub addendum
+
+terraform -> loadstring(game:HttpGet("https://raw.githubusercontent.com/Gnelfling/Carinae_hub/refs/heads/main/terraform.lua"))()
