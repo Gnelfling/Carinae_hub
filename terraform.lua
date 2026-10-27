@@ -2575,7 +2575,7 @@ do
 		local pPos = root.Position + Vector3.new(math.random(-25, 25), 8, math.random(-25, 25))
 		local m = Instance.new("Model")
 		m.Name = (probeType == "comms") and "OrbitalCommsRelay" or "OrbitalResearchProbe"
-
+		
 		local core = Instance.new("Part")
 		core.Name = "Core"
 		core.Size = Vector3.new(3, 3, 3)
@@ -2586,7 +2586,7 @@ do
 		core.CanCollide = false
 		core.Parent = m
 		m.PrimaryPart = core
-
+		
 		local dish = Instance.new("Part")
 		dish.Name = "Dish"
 		dish.Shape = Enum.PartType.Cylinder
@@ -3520,7 +3520,7 @@ do
 		taskbarButton = nil, taskbarStroke = nil, taskbarStrokeGrad = nil,
 		tbHairline = nil, tbLogoGrad = nil, tbClickArea = nil, tbTitle = nil, tbStatus = nil,
 		tbRestoreBtn = nil, tbBrushBtn = nil, tbCloseBtn = nil,
-		}) do ui[k] = v end
+	}) do ui[k] = v end
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = K.GUI_NAME; gui.ResetOnSpawn = false; gui.IgnoreGuiInset = false
@@ -4512,7 +4512,8 @@ do
 
 	-- PAGE 1: TERRAIN (Exact UI_old.txt inline Live Map + Cross-Section + Metrics + Rivers & Trails)
 	do
-		local page = createPage("Terrain")
+		local function buildTerrainPage()
+			local page = createPage("Terrain")
 		local styleSec = makeSection(page, "Formation style", 1, "16 Biomes + 256 Synth")
 		local styleGrid = makeGrid(styleSec, 4, 29, 1, 8)
 		for idx, name in ipairs(STYLE_ORDER) do
@@ -4655,11 +4656,14 @@ do
 		ui.centerCamBtn = makeButton(actionRow, "CENTER ON CAMERA", {LayoutOrder = 2})
 		ui.randomSeedBtn = makeButton(actionRow, "RANDOM SEED", {LayoutOrder = 3}, {special = true})
 		ui.boundsToggleBtn = makeButton(actionRow, "SHOW BOUNDS  ·  OFF", {LayoutOrder = 4})
+		end
+		buildTerrainPage()
 	end
 
 	-- PAGE 2: PLANET (ENHANCED 8-SHELL 3D PLANETARIUM VIEWFINDER + MULTI-CATEGORY SIMULATOR)
 	do
-		local page = createPage("Planet")
+		local function buildPlanetPage()
+			local page = createPage("Planet")
 		local vfSec = makeSection(page, "3D Planetary Telescope Viewfinder", 1, "Drag Globe to Orbit · Scroll to Zoom", C.planet)
 
 		local vfFrame = new("Frame", vfSec, {
@@ -5150,11 +5154,14 @@ do
 			requestPreview(true)
 			fn.startGeneration()
 		end)
+		end
+		buildPlanetPage()
 	end
 
 	-- PAGE: SPACE (Orbital Radar & Sub-Satellite Earth Tracking)
 	do
-		local page = createPage("Space")
+		local function buildSpacePage()
+			local page = createPage("Space")
 		local orbitSec = makeSection(page, "Orbital Radar & Sub-Satellite Earth Tracking", 1, "Real-Time Keplerian Orbit · Surface Ground Track · Multi-Cam", Color3.fromRGB(130, 175, 255))
 
 		local vfFrame = new("Frame", orbitSec, {
@@ -5560,11 +5567,14 @@ do
 			end
 			setStatus("EVA SPACEWALK", labs.spaceEvaActive and "EVA micro-thruster spacesuit engaged. Zero-G mobility boosted!" or "EVA spacesuit disengaged.", C.skyPale)
 		end)
+		end
+		buildSpacePage()
 	end
 
 	-- PAGE 3: ATLAS (Full-Scale Zoomable Map + Adaptive Alphanumeric A1 / D3 Tactical Grid)
 	do
-		local page = createPage("Atlas")
+		local function buildAtlasPage()
+			local page = createPage("Atlas")
 		local atlasSec = makeSection(page, "Full-scale tactical cartography atlas", 1, "Adaptive A1/D3 Sector Grid", C.sky)
 
 		-- Row 1: Zoom Presets & Real-Time Scale HUD
@@ -5782,11 +5792,14 @@ do
 				ui.atlasHud.Text = string.format("SEC %s  ·  (X %d, Z %d)  ·  Y %d (%s)  ·  %s  ·  %d° slope", secCode, round(wx), round(wz), round(h), seaStr, matName, slopeDeg)
 			end
 		end)
+		end
+		buildAtlasPage()
 	end
 
 	-- PAGE 4: BRUSH (Exact UI_old.txt In-World 3D Terrain Sculpt, Paint & Algorithmic 3D Carver)
 	do
-		local page = createPage("Brush")
+		local function buildBrushPage()
+			local page = createPage("Brush")
 		local ctrlSec = makeSection(page, "In-world 3D sculpt & paint studio", 1, "Hotkey [B] · Undo [Ctrl+Z]", C.cyan)
 		local topActions = makeGrid(ctrlSec, 3, 38, 1, 8)
 		ui.brushArmBtn = makeButton(topActions, "✎  ARM 3D BRUSH  ·  OFF [B]", {LayoutOrder = 1}, {tone = "cyan", textSize = 10, special = true})
@@ -5840,11 +5853,14 @@ do
 		ui.pick3DTrailBtn = makeButton(algoGrid, "PICK A→B 3D TRAIL", {LayoutOrder = 2}, {tone = "amber", textSize = 9})
 		ui.auto3DRiverBtn = makeButton(algoGrid, "AUTO-CARVE 3D RIVER", {LayoutOrder = 3}, {tone = "blue", textSize = 9, special = true})
 		ui.auto3DTrailBtn = makeButton(algoGrid, "AUTO-CARVE 3D TRAIL", {LayoutOrder = 4}, {tone = "amber", textSize = 9, special = true})
+		end
+		buildBrushPage()
 	end
 
 	-- PAGE 5: WATER
 	do
-		local page = createPage("Water")
+		local function buildWaterPage()
+			local page = createPage("Water")
 		local volSec = makeSection(page, "Hydrology & presets", 1, "6 Water Moods", C.blue)
 		local topRow = new("Frame", volSec, {Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = 1})
 		ui.waterToggle = makeButton(topRow, "WATER ENABLED  ·  ON", {Size = UDim2.fromOffset(172, 34)}, {selected = true, tone = "blue"})
@@ -5868,11 +5884,14 @@ do
 		local dynSec = makeSection(page, "Surface properties", 2, "Place-Wide Terrain Water", C.blue)
 		local dynGrid = makeGrid(dynSec, 4, 54, 1, 8)
 		for idx, key in ipairs(WATER_KEYS) do makeSliderField(dynGrid, key, idx, function() if not state.busy then applyWaterLook(currentConfig()) end end, "blue") end
+		end
+		buildWaterPage()
 	end
 
 	-- PAGE 6: BIOMES
 	do
-		local page = createPage("Biomes")
+		local function buildBiomesPage()
+			local page = createPage("Biomes")
 		local themeSec = makeSection(page, "Material color palette", 1, "Live Local SetMaterialColor", C.biome)
 		local themeGrid = makeGrid(themeSec, 6, 32, 1, 8)
 		for idx, tName in ipairs(MATERIAL_THEME_ORDER) do
@@ -5905,11 +5924,14 @@ do
 
 		local detailSec = makeSection(page, "Selected profile details", 3, nil, C.biome)
 		ui.biomeNotes = makeText(detailSec, "", 10, C.muted, FONT, {Size = UDim2.new(1, 0, 0, 52), TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, LineHeight = 1.25, LayoutOrder = 1})
+		end
+		buildBiomesPage()
 	end
 
 	-- PAGE 7: SYNTH (Exact UI_old.txt Slot Reels + 8-Card Discovery Deck + QoL & Modulators)
 	do
-		local page = createPage("Synth")
+		local function buildSynthPage()
+			local page = createPage("Synth")
 		local synthSec = makeSection(page, "Algorithmic terrain synthesizer", 1, "24 × 24 = 576 Combinations", C.purple)
 		local slotsRow = new("Frame", synthSec, {Size = UDim2.new(1, 0, 0, 96), BackgroundTransparency = 1, LayoutOrder = 1})
 		local function makeSlotCard(slotIndex, heading, posScale, anchorX)
@@ -6001,11 +6023,14 @@ do
 			end)
 		end
 		ui.rollDeckBtn = makeButton(deckSec, "GENERATE 8 FRESH OPTIONS FOR DECK", {Size = UDim2.new(1, 0, 0, 32), LayoutOrder = 2}, {tone = "purple", special = true})
+		end
+		buildSynthPage()
 	end
 
 	-- PAGE 8: PERF (Expanded Telemetry, Graphics LOD, Shadows/Fog & RAM Cache Purge)
 	do
-		local page = createPage("Perf")
+		local function buildPerfPage()
+			local page = createPage("Perf")
 		local monSec = makeSection(page, "Live client telemetry & performance profiles", 1, "Real-Time Frame Monitor", C.amber)
 		local pMetrics = makeGrid(monSec, 4, 52, 1, 8)
 		for idx, info in ipairs({{label="LIVE FPS",col=C.accent},{label="FRAME STEP",col=C.amber},{label="CHUNK SECTOR",col=C.blue},{label="LUA MEMORY",col=C.purple}}) do
@@ -6124,11 +6149,14 @@ do
 				setStatus("PERFORMANCE PROFILE", p.label, C.amberPale)
 			end)
 		end
+		end
+		buildPerfPage()
 	end
 
 	-- PAGE 9: LABS (Modular Sylvan Canopy #1 Trees + 14-Layer Volumetric Clouds + Placeholder)
 	do
-		local page = createPage("Labs")
+		local function buildLabsPage()
+			local page = createPage("Labs")
 		local treeSec = makeSection(page, "Experimental modular tree generation", 1, "Sylvan Canopy #1 · 22.56×37.36×17.53", C.rose)
 		makeText(treeSec,
 			"Modular 3D forest scatter system using Sylvan Canopy #1 (Slate Trunk Mesh 743209096 with dual 6-face bark textures 1352046477/1352046744 + Fabric Crown 743209371). Adaptive Mode syncs density, slope limits, snowline & leaf tint to your active biome.",
@@ -6139,7 +6167,7 @@ do
 		makeModularSwitch(tSwGrid, "Adaptive Terrain Metrics Sync", "Adapts tree count, scale, max slope, snowline & foliage tint to current biome.", "ADAPTIVE", labs.treesAdaptive, "rose", 2, function(on) labs.treesAdaptive = on end)
 
 		local tSlGrid = makeGrid(treeSec, 4, 54, 3, 8)
-		makeCustomSlider(tSlGrid, {label = "Spread intensity", min = 0.10, max = 40.00, step = 0.05, default = 1.00, get = function() return labs.spreadIntensity end, set = function(v) labs.spreadIntensity = v end}, 1, "rose")
+		makeCustomSlider(tSlGrid, {label = "Spread intensity", min = 0.10, max = 2.50, step = 0.05, default = 1.00, get = function() return labs.spreadIntensity end, set = function(v) labs.spreadIntensity = v end}, 1, "rose")
 		makeCustomSlider(tSlGrid, {label = "Base tree scale", min = 0.35, max = 2.20, step = 0.05, default = 0.85, get = function() return labs.baseScale end, set = function(v) labs.baseScale = v end}, 2, "rose")
 		makeCustomSlider(tSlGrid, {label = "Random size var.", min = 0.00, max = 0.75, step = 0.05, default = 0.30, get = function() return labs.sizeVariance end, set = function(v) labs.sizeVariance = v end}, 3, "rose")
 		makeCustomSlider(tSlGrid, {label = "Max slope limit", min = 0.25, max = 1.20, step = 0.05, default = 0.68, get = function() return labs.maxSlope end, set = function(v) labs.maxSlope = v end}, 4, "rose")
@@ -6253,11 +6281,14 @@ do
 				labs.im_a_placeholder = on
 				phSw.setBadge(on and "ARMED · DOING NOTHING :)" or "PLACEHOLDER · v0.0")
 			end)
+		end
+		buildLabsPage()
 	end
 
 	-- PAGE 10: WORLD (Expanded Explorer QoL, 3 Waypoints, Lighting/Physics Restore, Audio & Share Codes)
 	do
-		local page = createPage("World")
+		local function buildWorldPage()
+			local page = createPage("World")
 		local navQoLSec = makeSection(page, "Explorer mobility, environment & audio QoL", 1, "Speed, FOV, Time & SFX", C.indigo)
 		local tpGrid = makeGrid(navQoLSec, 4, 34, 1, 8)
 		ui.tpCenterBtn = makeButton(tpGrid, "TELEPORT TO CENTER", {LayoutOrder = 1}, {tone = "indigo", special = true})
@@ -6338,6 +6369,8 @@ do
 		corner(ui.shareBox, 7); stroke(ui.shareBox, C.stroke, 0.5); pad(ui.shareBox, 0, 10, 0, 10)
 		ui.exportButton = makeButton(shareRow, "EXPORT / COPY", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -112, 0, 0), Size = UDim2.fromOffset(106, 34)})
 		ui.importButton = makeButton(shareRow, "APPLY CODE", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.fromOffset(106, 34)}, {selected = true})
+		end
+		buildWorldPage()
 	end
 
 	----------------------------------------------------------------------------------------------------
